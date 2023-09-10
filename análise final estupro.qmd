@@ -1,0 +1,53 @@
+---
+title: "Untitled"
+author: "Adriano"
+format: docx
+editor: visual
+---
+
+# Análise de crimes de estupro no estado de São Paulo
+
+## Base de dados
+
+A base de dados socioeconômicos foram coletadas do site IBGE Cidades (<https://cidades.ibge.gov.br/brasil/sp/adamantina/panorama>), dados populacionais no site do SEADE (<https://repositorio.seade.gov.br/group/seade-municipios>) e os dados criminais do site da SSP/SP (<https://www.ssp.sp.gov.br/Estatistica/Pesquisa.aspx>). Psterior a coleta, os dados passaram por pré-processamento para ficar adequados para a análise de dados em painel.
+
+## Bibliotecas
+
+Além do software Gretl, foi utilizado a linguagem de programação R com as seguintes bibliotecas:
+
+```{r, message=FALSE, warning=FALSE}
+library(plm)
+library(stargazer)
+library(readxl)
+library(dplyr)
+library(lmtest)
+library(corrplot)
+library(geobr)
+library(ggplot2)
+```
+
+## Carregamento do dados
+
+```{r}
+df <- read_excel("dados_estupro.xlsx", sheet = "dados")
+maps <- read_excel("dados_estupro.xlsx", sheet = "micro")
+```
+
+## Mapas
+
+```{r}
+all_muni <- read_micro_region(
+  code_micro = "SP", 
+  year= 2010,
+  showProgress = FALSE
+)
+
+all_muni$name_micro <- tolower(all_muni$name_micro)
+maps$micro <- tolower(maps$micro)
+
+all_muni <- dplyr::left_join(all_muni, maps, by = c("name_micro" = "micro"))
+
+ggplot() + geom_sf(data=all_muni, aes(fill=taxa_2018), color="black", size=.15) +
+  scale_fill_distiller(palette = 16, direction = 1, na.value = "gray95", 
+                       name="Taxa", limits = c(10,59)) + theme_void()
+```
