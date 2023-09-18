@@ -1,0 +1,171 @@
+---
+title: "analise_gpt"
+author: "GPT e Adriano"
+format: docx
+editor: visual
+---
+
+## Bibliotecas
+
+```{r}
+library(plm)
+library(stargazer)
+library(readxl)
+library(dplyr)
+library(lmtest)
+library(sandwich)
+library(corrplot)
+library(car)
+library(AER)
+library(glmulti)
+options(scipen = 999)
+
+#base de dados
+df <- read_excel("dados_est.xlsx", sheet = "dados")
+
+```
+
+## Tratamento
+
+```{r}
+#tratamento
+df1 <- df %>% select(Micro, Ano, Taxa, Den_demo, T_MC, T_MEI, T_MEF, T_MEM,
+                     T_DC, T_DEI, T_DEF, T_DEM, T_PO, T_POASS, Media_PIB_Cap, Media_QSMM, Media_SOR, PIB) #%>% 
+ # filter(Ano==c(2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020))
+
+df1$Taxa <- log(df1$Taxa)
+df1$Den_demo <- log(df1$Den_demo)
+df1$T_MEI <- log(df1$T_MEI)
+df1$T_MEF <- log(df1$T_MEF)
+df1$T_MEM <- log(df1$T_MEM)
+df1$T_MC <- log(df1$T_MC)
+df1$T_DC <- log(df1$T_DC)
+df1$T_DEI <- log(df1$T_DEI)
+df1$T_DEF <- log(df1$T_DEF)
+df1$T_DEM <- log(df1$T_DEM)
+df1$T_PO <- log(df1$T_PO)
+df1$T_POASS <- log(df1$T_POASS)
+df1$Media_PIB_Cap <- log(df1$Media_PIB_Cap)
+df1$Media_QSMM <- log(df1$Media_QSMM)
+df1$Media_SOR <- log(df1$Media_SOR)
+df1$PIB <- log(df1$PIB)
+```
+
+## Correlação
+
+```{r}
+correl <- cor(df1 %>% select(Taxa, T_MEI, T_MEF, T_MEM, T_MC,
+                             T_DEI, T_DEF, T_DEM, T_DC,
+                             Media_PIB_Cap, Media_QSMM, Media_SOR, Den_demo, 
+                             T_PO, T_POASS, PIB))
+
+print(correl)
+
+corrplot(correl, type = "upper", order = 'FPC')
+```
+
+## Painel
+
+```{r}
+# Defina o painel
+pdata <- pdata.frame(df1, index = c("Micro", "Ano"))
+```
+
+## Modelos 1
+
+```{r, warning=FALSE}
+w <- plm(Taxa ~ T_DC + T_DEI + T_DEF + T_DEM + T_MC + T_MEI + T_MEF + T_MEM + 
+           T_POASS + T_POASS + Media_PIB_Cap + Media_QSMM + Media_SOR + Den_demo + PIB,
+         data = pdata, model = "within")
+
+r <- plm(Taxa ~ T_DC + T_DEI + T_DEF + T_DEM + T_MC + T_MEI + T_MEF + T_MEM + 
+           T_POASS + T_POASS + Media_PIB_Cap + Media_QSMM + Media_SOR + Den_demo + PIB,
+         data = pdata, model = "random")
+
+p <- plm(Taxa ~ T_DC + T_DEI + T_DEF + T_DEM + T_MC + T_MEI + T_MEF + T_MEM + 
+           T_POASS + T_POASS + Media_PIB_Cap + Media_QSMM + Media_SOR + Den_demo + PIB,
+         data = pdata, model = "pooling")
+stargazer(w, r, p, type = "text", column.labels = "Within", "Random", "Pooled")
+
+phtest(w, r)
+
+```
+
+## Modelo 2
+
+```{r, warning=FALSE}
+w_2 <- plm(Taxa ~ T_DC + T_DEI + T_MEM + 
+            Media_SOR + Den_demo + PIB,
+         data = pdata, model = "within")
+
+r_2 <- plm(Taxa ~ T_DC + T_DEI + T_MEM + 
+            Media_SOR + Den_demo + PIB,
+         data = pdata, model = "random")
+
+p_2 <- plm(Taxa ~ T_DC + T_DEI + T_MEM + 
+           Media_SOR + Den_demo + PIB,
+         data = pdata, model = "pooling")
+stargazer(w_2, r_2, p_2, type = "text", column.labels = "Within", "Random", "Pooled")
+
+phtest(w_2, r_2)
+
+```
+
+## **Diagnóstico para o Modelo de Efeitos Fixos**
+
+Teste de heterocedasticidade
+
+```{r}
+plmtest(w_2, type=c("bp"))
+```
+
+## Teste de Autocorrelação
+
+```{r}
+pbgtest(w_2, order = 1)
+```
+
+## Teste de especificação da modelagem
+
+```{r}
+pdata$pred_val = fitted.values(w_2)
+pdata$pred_val_sq = pdata$pred_val^2
+pdata$pred_val_cb = pdata$pred_val^3
+
+w_3 <- plm(Taxa ~ T_DC + T_DEI + T_MEM + Media_SOR + Den_demo + PIB + pred_val + pred_val_sq + pred_val_cb, data = pdata, model = "within")
+summary(w_3)
+```
+
+## Checagem de robustez
+
+Estimativas com erros-padrão robustos
+
+```{r}
+coeftest(w_2, vcovHC(w_2, type = "HC1"))
+```
+
+### **Adicionar Interações ou Transformações**
+
+```{r}
+w_2_interactions <- plm(Taxa ~ T_DC + T_DEI + T_MEM + Media_SOR + Den_demo + PIB + T_DEI:Media_SOR, data=pdata, model="within")
+summary(w_2_interactions)
+```
+
+## Melhoria do modelo
+
+```{r}
+w_4 <- plm(formula = Taxa ~ T_DC + T_DEI + T_MEM + Media_SOR + Den_demo + PIB + Media_QSMM , data = pdata, model = "within")
+summary(w_4)
+plmtest(w_4, type=c("bp"))#heterocedasticidade
+pbgtest(w_4, order = 1)#autocorrelação
+
+```
+
+```{r}
+pdata$pred_val = fitted.values(w_4)
+pdata$pred_val_sq = pdata$pred_val^2
+pdata$pred_val_cb = pdata$pred_val^3
+
+w_5 <- plm(Taxa ~ T_DC + T_DEI + T_MEM + Media_SOR + Den_demo + PIB + Media_QSMM + pred_val + pred_val_sq + pred_val_cb, data = pdata, model = "within")
+summary(w_5)
+```
